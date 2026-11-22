@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tableau de bord - Professeur</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <style>
+        .class-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 1.5rem;
+            margin-top: 1rem;
+        }
+        .class-card {
+            background: #f9f9f9;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 1rem;
+            transition: box-shadow 0.2s;
+        }
+        .class-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        .btn-small {
+            display: inline-block;
+            background: #4a90e2;
+            color: white;
+            padding: 0.4rem 0.8rem;
+            text-decoration: none;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            margin-top: 0.5rem;
+            margin-right: 0.5rem;
+            border: none;
+            cursor: pointer;
+        }
+        .btn-delete-class { background: #dc3545; }
+        .btn-delete-class:hover { background: #c82333; }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>🎓 MatchStudent</h1>
+        <nav>
+            <span>Bonjour, Professeur</span>
+            <a href="/index.html">Déconnexion</a>
+        </nav>
+    </header>
+
+    <main style="max-width: 1200px; margin: 2rem auto; padding: 0 1rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+            <h2>Mes classes</h2>
+            <a href="create-class.html" class="btn-small">+ Créer une classe</a>
+        </div>
+        <div id="classList" class="class-list">Chargement...</div>
+    </main>
+
+    <script>
+        const token = localStorage.getItem('token');
+        if (!token) window.location.href = '/login.html';
+
+        const classListDiv = document.getElementById('classList');
+
+        async function loadClasses() {
+            try {
+                const response = await fetch('/api/classes', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (!response.ok) throw new Error('Erreur chargement');
+                const classes = await response.json();
+                if (classes.length === 0) {
+                    classListDiv.innerHTML = '<p>Aucune classe pour le moment. Créez-en une !</p>';
+                } else {
+                    classListDiv.innerHTML = classes.map(c => `
+                        <div class="class-card">
+                            <h3>${escapeHtml(c.name)}</h3>
+                            <p>Code : ${c.code}</p>
+                            <p>Étudiants inscrits : ?</p>
+                            <a href="class-detail.html?id=${c.id}" class="btn-small">Voir la classe</a>
+                            <button class="btn-small btn-delete-class" data-id="${c.id}">🗑️ Supprimer</button>
+                        </div>
+                    `).join('');
+
+                    // Gestion suppression de classe
+                    document.querySelectorAll('.btn-delete-class').forEach(btn => {
+                        btn.addEventListener('click', async () => {
+                            const classId = btn.dataset.id;
+                            if (!confirm('Supprimer cette classe ? Tous les projets, groupes et soumissions seront perdus.')) return;
+                            try {
+                                const resp = await fetch(`/api/classes/${classId}`, {
+                                    method: 'DELETE',
+                                    headers: { 'Authorization': `Bearer ${token}` }
+                                });
+                                if (resp.ok) {
+                                    alert('Classe supprimée');
+                                    loadClasses();
+                                } else alert('Erreur');
+                            } catch (err) { alert('Erreur réseau'); }
+                        });
+                    });
+                }
+            } catch (err) {
+                console.error(err);
+                classListDiv.innerHTML = '<p>Erreur de chargement des classes.</p>';
+            }
+        }
+        //permet le saisit de class name 
+        //  remplace what we type in by how it should be typed in in html
+
+        function escapeHtml(str) {
+            if (!str) return '';
+            return str.replace(/[&<>]/g, function(m) {
+                if (m === '&') return '&amp;';
+                if (m === '<') return '&lt;';
+                if (m === '>') return '&gt;';
+                return m;
+            });
+        }
+
+        loadClasses();
+    </script>
+</body>
+</html>

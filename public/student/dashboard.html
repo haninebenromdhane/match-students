@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tableau de bord - Étudiant</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <style>
+        .class-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 1.5rem;
+            margin-top: 1rem;
+        }
+        .class-card {
+            background: #f9f9f9;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 1rem;
+        }
+        .btn-small {
+            display: inline-block;
+            background: #4a90e2;
+            color: white;
+            padding: 0.4rem 0.8rem;
+            text-decoration: none;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            margin-top: 0.5rem;
+            margin-right: 0.5rem;
+            border: none;
+            cursor: pointer;
+        }
+        .btn-leave { background: #dc3545; }
+        .btn-leave:hover { background: #c82333; }
+        .notifications {
+            margin-top: 1rem;
+        }
+        .notification {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 0.8rem;
+            margin-bottom: 0.5rem;
+            border-radius: 4px;
+        }
+        .notification.unread { background: #f8d7da; border-left-color: #dc3545; }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>🎓 MatchStudent</h1>
+        <nav>
+            <span>Bonjour, Étudiant</span>
+            <a href="profile-skills.html">Mes compétences</a>
+            <a href="join-class.html">Rejoindre une classe</a>
+            <a href="/index.html">Déconnexion</a>
+        </nav>
+    </header>
+
+    <main style="max-width: 1200px; margin: 2rem auto; padding: 0 1rem;">
+        <h2>Mes classes</h2>
+        <div id="classList" class="class-list">Chargement...</div>
+
+        <h2 style="margin-top: 2rem;">Notifications</h2>
+        <div id="notifications" class="notifications">Chargement...</div>
+    </main>
+
+    <script>
+        const token = localStorage.getItem('token');
+        if (!token) window.location.href = '/login.html';
+
+        const classListDiv = document.getElementById('classList');
+        const notificationsDiv = document.getElementById('notifications');
+
+        async function loadClasses() {
+            try {
+                const response = await fetch('/api/student/classes', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (!response.ok) throw new Error('Erreur chargement');
+                const classes = await response.json();
+                if (classes.length === 0) {
+                    classListDiv.innerHTML = '<p>Aucune classe. Rejoignez-en une avec un code !</p>';
+                } else {
+                    classListDiv.innerHTML = classes.map(c => `
+                        <div class="class-card">
+                            <h3>${escapeHtml(c.name)}</h3>
+                            <p>Professeur : ${escapeHtml(c.professor_name) || '—'}</p>
+                            <p>Code : ${c.code}</p>
+                            <a href="class-projects.html?classId=${c.id}" class="btn-small">Voir les projets</a>
+                            <button class="btn-small btn-leave" data-id="${c.id}">🚪 Quitter la classe</button>
+                        </div>
+                    `).join('');
+
+                    // Gestion "Quitter la classe"
+                    document.querySelectorAll('.btn-leave').forEach(btn => {
+                        btn.addEventListener('click', async () => {
+                            const classId = btn.dataset.id;
+                            if (!confirm('Quitter cette classe ? Vous ne pourrez plus accéder aux projets.')) return;
+                            try {
+                                const resp = await fetch(`/api/classes/${classId}/leave`, {
+                                    method: 'DELETE',
+                                    headers: { 'Authorization': `Bearer ${token}` }
+                                });
+                                if (resp.ok) {
+                                    alert('Vous avez quitté la classe');
+                                    loadClasses();
+                                } else alert('Erreur');
+                            } catch (err) { alert('Erreur réseau'); }
+                        });
+                    });
+                }
+            } catch (err) {
+                console.error(err);
+                classListDiv.innerHTML = '<p>Erreur de chargement des classes.</p>';
+            }
+        }
+
+        async function loadNotifications() {
+            try {
+                const response = await fetch('/api/notifications', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (!response.ok) throw new Error('Erreur');
+                const notifs = await response.json();
+                if (notifs.length === 0) {
+                    notificationsDiv.innerHTML = '<p>Aucune notification.</p>';
+                } else {
+                    notificationsDiv.innerHTML = notifs.map(n => `
+                        <div class="notification ${!n.is_read ? 'unread' : ''}">
+                            ${escapeHtml(n.message)}
+                            <br><small>${new Date(n.created_at).toLocaleString()}</small>
+                        </div>
+                    `).join('');
+                }
+            } catch (err) {
+                console.error(err);
+                notificationsDiv.innerHTML = '<p>Erreur de chargement des notifications.</p>';
+            }
+        }
+
+        function escapeHtml(str) {
+            if (!str) return '';
+            return str.replace(/[&<>]/g, function(m) {
+                if (m === '&') return '&amp;';
+                if (m === '<') return '&lt;';
+                if (m === '>') return '&gt;';
+                return m;
+            });
+        }
+
+        loadClasses();
+        loadNotifications();
+    </script>
+</body>
+</html>

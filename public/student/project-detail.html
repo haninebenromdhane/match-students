@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Mon projet - EduMatch</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <style>
+        .group-card, .submission-card, .skills-card { background:#f9f9f9; border:1px solid #ddd; border-radius:8px; padding:1rem; margin:1rem 0; }
+        .grade { font-weight:bold; color:#28a745; }
+        .not-graded { color:#dc3545; }
+        .skill-row { display: flex; gap: 0.5rem; margin-bottom: 0.5rem; align-items: center; }
+        .skill-name { flex: 2; }
+        .skill-level { flex: 1; }
+        .remove-skill { background:#dc3545; color:white; border:none; border-radius:4px; padding:4px 8px; cursor:pointer; }
+        #addSkill { background:#28a745; color:white; border:none; border-radius:4px; padding:4px 8px; margin:0.5rem 0; cursor:pointer; }
+    </style>
+</head>
+<body>
+    <header><h1>🎓 EduMatch</h1><nav><a href="dashboard.html">Tableau de bord</a><a href="profile-skills.html">Mes compétences</a><a href="join-class.html">Rejoindre une classe</a><a href="/index.html">Déconnexion</a></nav></header>
+    <main style="max-width:800px; margin:2rem auto;">
+        <div id="projectInfo"><h2 id="projectTitle">Chargement...</h2><p id="projectDescription"></p><p id="projectDeadline"></p></div>
+
+        <div id="skillsSection" style="display:none;">
+            <h3>Vos compétences pour ce projet</h3>
+            <div class="skills-card">
+                <p>Indiquez votre niveau pour chaque compétence requise :</p>
+                <div id="skillsContainer"></div>
+                <button id="saveSkillsBtn" class="btn-small">Enregistrer mes compétences</button>
+            </div>
+        </div>
+
+        <h3>Mon groupe</h3><div id="groupInfo" class="group-card">Chargement...</div>
+
+        <div id="submitSection" style="display:none;">
+            <h3>Soumettre mon travail</h3>
+            <form id="submitForm" enctype="multipart/form-data">
+                <input type="file" id="fileInput" accept=".pdf,.zip,.docx" required>
+                <button type="submit">Envoyer</button>
+            </form>
+        </div>
+
+        <h3>Ma soumission</h3><div id="submissionInfo" class="submission-card">Chargement...</div>
+        <div id="message"></div>
+    </main>
+    <script>
+        const pid = new URLSearchParams(location.search).get('id');
+        if (!pid) { alert('ID projet manquant'); location.href='dashboard.html'; }
+        const token = localStorage.getItem('token');
+        if (!token) location.href='/login.html';
+        let deadline = null;
+        let requiredSkills = [];
+
+        async function loadRequiredSkills() {
+            const res = await fetch(`/api/projects/${pid}/required-skills`, { headers:{'Authorization':`Bearer ${token}`} });
+            if (res.ok) return await res.json();
+            return [];
+        }
+
+        async function loadMySkills() {
+            const res = await fetch(`/api/projects/${pid}/my-skills`, { headers:{'Authorization':`Bearer ${token}`} });
+            if (res.ok) return await res.json();
+            return [];
+        }
+
+        async function loadProjectAndGroup() {
+            const res = await fetch(`/api/projects/${pid}/my-group`, { headers:{'Authorization':`Bearer ${token}`} });
+            const data = await res.json();
+            document.getElementById('projectTitle').innerText = data.project.title;
+            document.getElementById('projectDescription').innerText = data.project.description||'';
+            const details = await fetch(`/api/projects/${pid}/details`, { headers:{'Authorization':`Bearer ${token}`} });
+            if (details.ok) {
+                const d = await details.json();
+                if (d.deadline) {
+                    deadline = new Date(d.deadline);
+                    document.getElementById('projectDeadline').innerHTML = `<strong>Date limite :</strong> ${deadline.toLocaleString()}`;
+                    if (new Date() > deadline) document.getElementById('submitForm').style.display = 'none';
+                }
+            }
+            if (data.group) {
+                const members = data.group.members.map(m=>m.name).join(', ');
+                document.getElementById('groupInfo').innerHTML = `<p><strong>Groupe ${data.group.id}</strong><br>Membres : ${members}</p>`;
+                document.getElementById('submitSection').style.display = 'block';
+            } else {
+                document.getElementById('groupInfo').innerHTML = '<p>Les groupes n\'ont pas encore été formés par le professeur.</p>';
+                document.getElementById('submitSection').style.display = 'none';
+            }
+        }
+
+        async function loadSubmission() {
+            const subRes = await fetch(`/api/projects/${pid}/my-submission`, { headers:{'Authorization':`Bearer ${token}`} });
+            const subData = await subRes.json();
+            const div = document.getElementById('submissionInfo');
+            if (subData.submission && subData.submission.file_url) {
+                const date = new Date(subData.submission.submitted_at).toLocaleString();
+                const gradeHtml = subData.submission.grade !== null ? `<span class="grade">Note : ${subData.submission.grade}/20</span>` : '<span class="not-graded">Non notée encore</span>';
+                div.innerHTML = `
+                    <p><strong>Fichier :</strong> <a href="${subData.submission.file_url}" target="_blank">📄 Télécharger</a></p>
+                    <p><strong>Soumis le :</strong> ${date}</p><p>${gradeHtml}</p>
+                    <button id="deleteSubmission" class="delete-btn" style="background:#dc3545; color:white; border:none; border-radius:4px; padding:4px 8px; cursor:pointer;">🗑️ Supprimer</button>
+                `;
+                document.getElementById('deleteSubmission').onclick = async () => {
+                    if (confirm('Supprimer définitivement votre fichier ?')) {
+                        const del = await fetch(`/api/projects/${pid}/my-submission`, { method:'DELETE', headers:{'Authorization':`Bearer ${token}`} });
+                        if (del.ok) { alert('Soumission supprimée'); loadSubmission(); }
+                        else alert('Erreur');
+                    }
+                };
+            } else {
+                div.innerHTML = '<p>Aucun fichier soumis pour le moment.</p>';
+            }
+        }
+
+        async function initSkills() {
+            requiredSkills = await loadRequiredSkills();
+            if (!requiredSkills.length) return;
+            const mySkills = await loadMySkills();
+            const skillsMap = new Map(mySkills.map(s => [s.skill_name, s.level]));
+
+            const container = document.getElementById('skillsContainer');
+            container.innerHTML = '';
+            for (const req of requiredSkills) {
+                const level = skillsMap.get(req.skill_name) || 3;
+                const div = document.createElement('div');
+                div.className = 'skill-row';
+                div.innerHTML = `
+                    <span style="flex:2;"><strong>${escapeHtml(req.skill_name)}</strong> (requis: niveau ${req.required_level})</span>
+                    <select class="skill-level" data-skill="${req.skill_name}" style="flex:1;">
+                        ${[1,2,3,4,5].map(l => `<option value="${l}" ${l==level?'selected':''}>Niveau ${l}</option>`).join('')}
+                    </select>
+                `;
+                container.appendChild(div);
+            }
+            document.getElementById('skillsSection').style.display = 'block';
+        }
+
+        document.getElementById('saveSkillsBtn')?.addEventListener('click', async () => {
+            const skills = [];
+            document.querySelectorAll('.skill-level').forEach(select => {
+                const name = select.dataset.skill;
+                const level = parseInt(select.value);
+                skills.push({ name, level });
+            });
+            try {
+                const res = await fetch(`/api/projects/${pid}/my-skills`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                    body: JSON.stringify({ skills })
+                });
+                if (res.ok) {
+                    alert('Compétences enregistrées !');
+                    document.getElementById('skillsSection').style.display = 'none';
+                } else alert('Erreur');
+            } catch(e) { alert('Erreur réseau'); }
+        });
+
+        document.getElementById('submitForm')?.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const file = document.getElementById('fileInput').files[0];
+            if (!file) return alert('Choisissez un fichier');
+            if (deadline && new Date() > deadline) return alert('Délai dépassé');
+            const fd = new FormData();
+            fd.append('file', file);
+            try {
+                const res = await fetch(`/api/projects/${pid}/submit`, { method:'POST', headers:{'Authorization':`Bearer ${token}`}, body:fd });
+                const data = await res.json();
+                if (res.ok) {
+                    alert('Fichier soumis !');
+                    document.getElementById('fileInput').value = '';
+                    loadSubmission();
+                } else alert('Erreur : ' + data.error);
+            } catch (err) { alert('Erreur réseau'); }
+        });
+
+        function escapeHtml(str) { return str.replace(/[&<>]/g, m=> m=='&'?'&amp;':m=='<'?'&lt;':'&gt;'); }
+
+        loadProjectAndGroup();
+        loadSubmission();
+        initSkills();
+    </script>
+</body>
+</html>

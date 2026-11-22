@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Créer une classe - Professeur</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+    <header>
+        <h1>🎓 EduMatch</h1>
+        <nav>
+            <a href="dashboard.html">Tableau de bord</a>
+            <a href="/index.html">Déconnexion</a>
+        </nav>
+    </header>
+
+    <div class="container">
+        <h2>Créer une nouvelle classe</h2>
+        <form id="createClassForm">
+            <input type="text" id="className" placeholder="Nom de la classe" required>
+            <button type="submit">Créer la classe</button>
+        </form>
+    </div>
+
+    <script>
+    document.getElementById('createClassForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const className = document.getElementById('className').value;
+
+        const token = localStorage.getItem('token');
+        if (!token) {
+            window.location.href = '/login.html';
+            return;
+        }
+
+        try {
+            const response = await fetch('/api/classes', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({ name: className })
+            });
+            const data = await response.json();
+            if (response.ok) {
+                //genere le code dacces a la classe si succes
+                alert(`Classe créée avec succès ! Code d'accès : ${data.code}`);
+                window.location.href = 'dashboard.html';
+            } else {
+                alert('Erreur : ' + data.error);
+            }
+        } catch (err) {
+            console.error(err);
+            alert('Erreur de connexion au serveur');
+        }
+    });
+</script>
+</body>
+</html>

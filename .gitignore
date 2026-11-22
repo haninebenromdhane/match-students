@@ -1,0 +1,25 @@
+
+# Dependencies
+node_modules/
+
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
+
+# Personal files
+.DS_Store
+*.mov
+*.mp4
+
+# Database exports and data
+*.sql
+*.dump
+*.bak
+
+# Uploaded files
+backend/uploads/
+
+# Logs
+*.log
+

@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Détail de la classe - EduMatch</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <style>
+        .student-card, .project-card { background:#f9f9f9; border:1px solid #ddd; border-radius:6px; padding:0.8rem; margin-bottom:0.8rem; }
+        .btn-small { display:inline-block; background:#4a90e2; color:white; padding:0.3rem 0.8rem; text-decoration:none; border-radius:4px; font-size:0.85rem; margin-right:0.5rem; border:none; cursor:pointer; }
+        .btn-generate { background:#28a745; }
+        .btn-generate:disabled { background:#ccc; cursor:not-allowed; }
+        .btn-edit { background:#ffc107; color:#333; }
+        .btn-delete-project { background:#dc3545; }
+        .btn-deadline { background:#17a2b8; }
+        .deadline-input { width:200px; margin-right:0.5rem; }
+    </style>
+</head>
+<body>
+    <header><h1>🎓 EduMatch</h1><nav><a href="dashboard.html">Tableau de bord</a><a href="/index.html">Déconnexion</a></nav></header>
+    <main style="max-width:1200px; margin:2rem auto; padding:0 1rem;">
+        <div style="background:#f0f7ff; padding:1rem; border-radius:8px; margin-bottom:2rem;"><h2 id="className">Nom de la classe</h2><p><strong>Code :</strong> <span id="classCode">XXXXXX</span></p></div>
+        <div style="display:flex; gap:1rem; margin-bottom:1rem;"><button id="showStudentsBtn" style="padding:0.5rem 1rem; background:#4a90e2; color:white; border:none; border-radius:4px;">Étudiants</button><button id="showProjectsBtn" style="padding:0.5rem 1rem; background:#ccc; border:none; border-radius:4px;">Projets</button></div>
+        <div id="studentsSection"><div style="display:flex; justify-content:space-between;"><h3>Étudiants inscrits</h3><span id="studentCount">0</span></div><div id="studentsList" style="margin-top:1rem;">Chargement...</div></div>
+        <div id="projectsSection" style="display:none;"><div style="display:flex; justify-content:space-between;"><h3>Projets</h3><a href="create-project.html" id="createProjectLink" class="btn-small">+ Créer</a></div><div id="projectsList" style="margin-top:1rem;">Chargement...</div></div>
+    </main>
+    <script>
+        //gets the classes id from url 
+        const classId = new URLSearchParams(location.search).get('id');
+        if (!classId) { alert('ID manquant'); location.href='dashboard.html'; }
+        const token = localStorage.getItem('token');
+        if (!token) location.href='/login.html';
+        const studentsSection = document.getElementById('studentsSection'), projectsSection = document.getElementById('projectsSection');
+        const studentsBtn = document.getElementById('showStudentsBtn'), projectsBtn = document.getElementById('showProjectsBtn');
+        const studentsList = document.getElementById('studentsList'), projectsList = document.getElementById('projectsList');
+        const studentCountSpan = document.getElementById('studentCount');
+        document.getElementById('createProjectLink').href = `create-project.html?classId=${classId}`;
+        async function loadClassInfo() {
+            const res = await fetch('/api/classes', { headers:{'Authorization':`Bearer ${token}`} });
+            if (res.ok) { const classes = await res.json(); const curr = classes.find(c=>c.id==classId); if(curr){ document.getElementById('className').innerText = curr.name; document.getElementById('classCode').innerText = curr.code; } }
+        }
+        async function loadStudents() {
+            const res = await fetch(`/api/classes/${classId}/students`, { headers:{'Authorization':`Bearer ${token}`} });
+            const students = await res.json();
+            studentCountSpan.innerText = students.length;
+            if(students.length) studentsList.innerHTML = students.map(s=>`<div class="student-card"><strong>${escapeHtml(s.first_name)} ${escapeHtml(s.last_name)}</strong> (${escapeHtml(s.email)})</div>`).join('');
+            else studentsList.innerHTML = '<p>Aucun étudiant.</p>';
+        }
+        async function loadProjects() {
+            const res = await fetch(`/api/classes/${classId}/projects`, { headers:{'Authorization':`Bearer ${token}`} });
+            let projects = await res.json();
+            if(!projects.length) { projectsList.innerHTML = '<p>Aucun projet.</p>'; return; }
+            projectsList.innerHTML = projects.map(p => `
+                <div class="project-card">
+                    <h4>${escapeHtml(p.title)}</h4><p>${escapeHtml(p.description)||''}</p>
+                    <p>Groupe taille: ${p.group_size} | Groupes formés: ${p.group_count||0}</p>
+                    <p>Date limite: ${p.deadline?new Date(p.deadline).toLocaleString():'Non définie'}</p>
+                    <input type="datetime-local" id="deadline-${p.id}" value="${p.deadline?new Date(p.deadline).toISOString().slice(0,16):''}" class="deadline-input">
+                    <button class="btn-small btn-deadline" data-id="${p.id}">📅 Définir deadline</button>
+                    <button class="btn-small btn-generate" data-id="${p.id}" ${p.group_count>0?'disabled':''}>⚙️ Générer groupes</button>
+                    <a href="project-detail.html?id=${p.id}" class="btn-small">📋 Voir groupes</a>
+                    <a href="edit-project.html?id=${p.id}" class="btn-small btn-edit">✏️ Modifier</a>
+                    <button class="btn-small btn-delete-project" data-id="${p.id}">🗑️ Supprimer</button>
+                </div>
+            `).join('');
+            // Deadline (editable with a datetime‑local input and a “Définir deadline” button).
+            document.querySelectorAll('.btn-deadline').forEach(btn => btn.onclick = async () => {
+                const pid = btn.dataset.id, val = document.getElementById(`deadline-${pid}`).value;
+                await fetch(`/api/projects/${pid}/deadline`, { method:'PUT', headers:{'Content-Type':'application/json','Authorization':`Bearer ${token}`}, body:JSON.stringify({ deadline:val?new Date(val).toISOString():null }) });
+                loadProjects();
+            });
+            // Generate groups “Générer groupes” (disabled if groups already exist), “Voir groupes”, “Modifier”, “Supprimer”.
+            document.querySelectorAll('.btn-generate:not([disabled])').forEach(btn => btn.onclick = async () => {
+                if(!confirm('Générer les groupes ?')) return;
+                const pid = btn.dataset.id;
+                const resp = await fetch(`/api/projects/${pid}/generate-groups`, { method:'POST', headers:{'Authorization':`Bearer ${token}`} });
+                const data = await resp.json();
+                if(resp.ok) { alert(`Groupes générés (${data.numGroups} groupes).`); loadProjects(); }
+                else alert('Erreur: '+data.error);
+            });
+            // Delete project
+            document.querySelectorAll('.btn-delete-project').forEach(btn => btn.onclick = async () => {
+                if(confirm('Supprimer ce projet ?')) { await fetch(`/api/projects/${btn.dataset.id}`, { method:'DELETE', headers:{'Authorization':`Bearer ${token}`} }); loadProjects(); }
+            });
+        }
+        function escapeHtml(str) { return str?.replace(/[&<>]/g, m=> m=='&'?'&amp;':m=='<'?'&lt;':'&gt;')||''; }
+        studentsBtn.onclick = () => { studentsSection.style.display='block'; projectsSection.style.display='none'; studentsBtn.style.background='#4a90e2'; projectsBtn.style.background='#ccc'; loadStudents(); };
+        projectsBtn.onclick = () => { studentsSection.style.display='none'; projectsSection.style.display='block'; studentsBtn.style.background='#ccc'; projectsBtn.style.background='#4a90e2'; loadProjects(); };
+        loadClassInfo(); loadStudents();
+    </script>
+</body>
+</html>

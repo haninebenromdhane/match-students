@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Projet - EduMatch</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <style>
+        table { width:100%; border-collapse:collapse; margin-top:1rem; }
+        th, td { border:1px solid #ddd; padding:8px; text-align:left; }
+        th { background:#f2f2f2; }
+        .grade-input { width:70px; }
+        button { background:#4a90e2; color:white; border:none; border-radius:4px; padding:4px 8px; cursor:pointer; }
+        .not-submitted { color:#999; font-style:italic; }
+    </style>
+</head>
+<body>
+    <header><h1>🎓 EduMatch</h1><nav><a href="dashboard.html">Tableau de bord</a><a href="/index.html">Déconnexion</a></nav></header>
+    <main style="max-width:1200px; margin:2rem auto;">
+        <h2 id="projectTitle">Chargement...</h2>
+        <p id="projectDescription"></p>
+        <h3>Soumissions par groupe</h3>
+        <div id="submissionsList">Chargement...</div>
+    </main>
+    <script>
+        const pid = new URLSearchParams(location.search).get('id');
+        if (!pid) { alert('ID projet manquant'); location.href='dashboard.html'; }
+        const token = localStorage.getItem('token');
+        if (!token) location.href='/login.html';
+
+        async function load() {
+            const details = await fetch(`/api/projects/${pid}/details`, { headers:{'Authorization':`Bearer ${token}`} });
+            const proj = await details.json();
+            document.getElementById('projectTitle').innerText = proj.title;
+            document.getElementById('projectDescription').innerText = proj.description||'';
+            const subs = await fetch(`/api/projects/${pid}/submissions`, { headers:{'Authorization':`Bearer ${token}`} });
+            const list = await subs.json();
+            const container = document.getElementById('submissionsList');
+            if (!list.length) {
+                container.innerHTML = '<p>Aucun groupe n\'a encore été généré pour ce projet. Retournez à la classe et cliquez sur "Générer les groupes".</p>';
+                return;
+            }
+            let html = `<table><thead><tr><th>Groupe</th><th>Membres</th><th>Fichier</th><th>Soumis le</th><th>Note</th><th>Action</th></tr></thead><tbody>`;
+            for (const s of list) {
+                const fileLink = s.file_url ? `<a href="${s.file_url}" target="_blank">📄 Télécharger</a>` : '<span class="not-submitted">Aucune soumission</span>';
+                const date = s.submitted_at ? new Date(s.submitted_at).toLocaleString() : '-';
+                const gradeVal = s.grade !== null ? s.grade : '';
+                html += `<tr>
+                    <td>${s.group_id}</td>
+                    <td>${escapeHtml(s.members)}</td>
+                    <td>${fileLink}</td>
+                    <td>${date}</td>
+                    <td><input type="number" step="0.5" min="0" max="20" value="${gradeVal}" class="grade-input" data-group="${s.group_id}"></td>
+                    <td><button class="save-grade" data-group="${s.group_id}">Enregistrer note</button></td>
+                </tr>`;
+            }
+            html += '</tbody></table>';
+            container.innerHTML = html;
+            document.querySelectorAll('.save-grade').forEach(btn => {
+                btn.onclick = async () => {
+                    const gid = btn.dataset.group;
+                    const inp = document.querySelector(`.grade-input[data-group="${gid}"]`);
+                    const grade = parseFloat(inp.value);
+                    if (isNaN(grade) || grade<0 || grade>20) return alert('Note 0-20');
+                    const resp = await fetch(`/api/projects/${pid}/grade`, { method:'POST', headers:{'Content-Type':'application/json','Authorization':`Bearer ${token}`}, body:JSON.stringify({ group_id:gid, grade }) });
+                    if (resp.ok) { alert('Note enregistrée'); load(); }
+                    else alert('Erreur');
+                };
+            });
+        }
+        function escapeHtml(str) { return str.replace(/[&<>]/g, m => m=='&'?'&amp;':m=='<'?'&lt;':'&gt;'); }
+        load();
+    </script>
+</body>
+</html>

@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rejoindre une classe - Étudiant</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+    <header>
+        <h1>🎓 EduMatch</h1>
+        <nav>
+            <a href="dashboard.html">Tableau de bord</a>
+            <a href="profile-skills.html">Mes compétences</a>
+            <a href="/index.html">Déconnexion</a>
+        </nav>
+    </header>
+
+    <div class="container">
+        <h2>Rejoindre une classe</h2>
+        <form id="joinClassForm">
+            <input type="text" id="classCode" placeholder="Code d'accès (ex: WEB123)" required>
+            <button type="submit">Rejoindre</button>
+        </form>
+        <p style="margin-top: 1rem; font-size: 0.9rem; color: #666;">
+            Le code est fourni par votre professeur.
+        </p>
+    </div>
+
+   <script>
+    document.getElementById('joinClassForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const code = document.getElementById('classCode').value;
+
+        const token = localStorage.getItem('token');
+        if (!token) {
+            window.location.href = '/login.html';
+            return;
+        }
+
+        try {
+            const response = await fetch('/api/classes/join', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({ code })
+            });
+            const data = await response.json();
+            if (response.ok) {
+                alert(`Inscription réussie à la classe "${data.class.name}" !`);
+                window.location.href = 'dashboard.html';
+            } else {
+                alert('Erreur : ' + data.error);
+            }
+        } catch (err) {
+            console.error(err);
+            alert('Erreur de connexion au serveur');
+        }
+    });
+</script>
+</body>
+</html>

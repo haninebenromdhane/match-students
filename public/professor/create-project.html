@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Créer un projet - EduMatch</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <style>
+        /* Force la visibilité du texte dans les champs de compétences */
+        .skill-name, .skill-level, input, textarea, select {
+            color: black !important;
+            background-color: white !important;
+        }
+        .skill-row { display: flex; gap: 0.5rem; margin-bottom: 0.5rem; align-items: center; }
+        .skill-name { flex: 2; }
+        .skill-level { flex: 1; }
+        .remove-skill { background:#dc3545; color:white; border:none; border-radius:4px; padding:4px 8px; cursor:pointer; }
+        #addSkill { background:#28a745; color:white; border:none; border-radius:4px; padding:4px 8px; margin:0.5rem 0; cursor:pointer; }
+    </style>
+</head>
+<body>
+    <header><h1>🎓 EduMatch</h1><nav><a href="dashboard.html">Tableau de bord</a><a href="/index.html">Déconnexion</a></nav></header>
+    <div class="container">
+        <h2>Créer un nouveau projet</h2>
+        <form id="createProjectForm">
+            <input type="text" id="title" placeholder="Titre du projet" required>
+            <textarea id="description" placeholder="Description du projet" rows="4"></textarea>
+            <input type="number" id="groupSize" placeholder="Taille des groupes (ex: 3)" required>
+            <input type="number" id="maxGroups" placeholder="Nombre maximum de groupes (optionnel)">
+            
+            <!-- Champ date limite -->
+            <div>
+                <label for="deadline">Date limite (optionnelle) :</label>
+                <input type="datetime-local" id="deadline">
+            </div>
+
+            <h3>Compétences requises</h3>
+            <div id="skillsContainer">
+                <div class="skill-row">
+                    <input type="text" class="skill-name" placeholder="Nom (ex: Python)" required>
+                    <select class="skill-level">
+                        <option value="1">Niveau 1 (Débutant)</option>
+                        <option value="2">Niveau 2</option>
+                        <option value="3" selected>Niveau 3</option>
+                        <option value="4">Niveau 4</option>
+                        <option value="5">Niveau 5 (Expert)</option>
+                    </select>
+                    <button type="button" class="remove-skill">X</button>
+                </div>
+            </div>
+            <button type="button" id="addSkill">+ Ajouter une compétence</button>
+            <button type="submit">Créer le projet</button>
+        </form>
+    </div>
+    <script>
+        const urlParams = new URLSearchParams(window.location.search);
+        const classId = urlParams.get('classId');
+        if (!classId) { alert('ID de classe manquant'); location.href='dashboard.html'; }
+        const token = localStorage.getItem('token');
+        if (!token) location.href='/login.html';
+
+        const container = document.getElementById('skillsContainer');
+        const addBtn = document.getElementById('addSkill');
+
+        function addSkillRow() {
+            const div = document.createElement('div');
+            div.className = 'skill-row';
+            div.innerHTML = `
+                <input type="text" class="skill-name" placeholder="Nom" required>
+                <select class="skill-level">
+                    <option value="1">Niveau 1</option>
+                    <option value="2">Niveau 2</option>
+                    <option value="3" selected>Niveau 3</option>
+                    <option value="4">Niveau 4</option>
+                    <option value="5">Niveau 5</option>
+                </select>
+                <button type="button" class="remove-skill">X</button>
+            `;
+            div.querySelector('.remove-skill').addEventListener('click', () => div.remove());
+            container.appendChild(div);
+        }
+        addBtn.addEventListener('click', addSkillRow);
+        document.querySelectorAll('.remove-skill').forEach(btn => {
+            btn.addEventListener('click', function() { this.closest('.skill-row').remove(); });
+        });
+
+        document.getElementById('createProjectForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const title = document.getElementById('title').value;
+            const description = document.getElementById('description').value;
+            const groupSize = parseInt(document.getElementById('groupSize').value);
+            const maxGroups = document.getElementById('maxGroups').value ? parseInt(document.getElementById('maxGroups').value) : null;
+            const deadline = document.getElementById('deadline').value || null;
+
+            //The backend will store these competencies in the project_skills table.
+            const required_skills = [];
+            document.querySelectorAll('.skill-row').forEach(row => {
+                const name = row.querySelector('.skill-name').value.trim();
+                const level = parseInt(row.querySelector('.skill-level').value);
+                if (name) required_skills.push({ name, level });
+            });
+            if (required_skills.length === 0) { alert('Ajoutez au moins une compétence requise.'); return; }
+
+            try {
+                const response = await fetch('/api/projects', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                    body: JSON.stringify({
+                        class_id: parseInt(classId),
+                        title, description,
+                        group_size: groupSize, max_groups: maxGroups,
+                        deadline: deadline ? new Date(deadline).toISOString() : null,
+                        required_skills
+                    })
+                });
+                const data = await response.json();
+                if (response.ok) {
+                    alert('Projet créé !');
+                    window.location.href = `class-detail.html?id=${classId}`;
+                } else alert('Erreur : ' + data.error);
+            } catch (err) { alert('Erreur réseau'); }
+        });
+    </script>
+</body>
+</html>

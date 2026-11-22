@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Modifier projet - EduMatch</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <style>
+        .skill-row { display: flex; gap: 0.5rem; margin-bottom: 0.5rem; align-items: center; }
+        .skill-name { flex: 2; }
+        .skill-level { flex: 1; }
+        .remove-skill { background:#dc3545; color:white; border:none; border-radius:4px; padding:4px 8px; cursor:pointer; }
+        #addSkill { background:#28a745; color:white; border:none; border-radius:4px; padding:4px 8px; margin:0.5rem 0; cursor:pointer; }
+    </style>
+</head>
+<body>
+    <header><h1>🎓 EduMatch</h1><nav><a href="dashboard.html">Tableau de bord</a><a href="/index.html">Déconnexion</a></nav></header>
+    <main class="container">
+        <h2>Modifier le projet</h2>
+        <form id="editForm">
+            <input type="text" id="title" placeholder="Titre" required>
+            <textarea id="description" placeholder="Description" rows="3"></textarea>
+            <input type="number" id="groupSize" placeholder="Taille des groupes" required>
+            <input type="number" id="maxGroups" placeholder="Max groupes (optionnel)">
+            <h3>Compétences requises</h3>
+            <div id="skillsContainer"></div>
+            <button type="button" id="addSkill">+ Ajouter compétence</button>
+            <button type="submit">Enregistrer les modifications</button>
+        </form>
+    </main>
+    <script>
+        const pid = new URLSearchParams(location.search).get('id');
+        if (!pid) { alert('ID projet manquant'); location.href='dashboard.html'; }
+        const token = localStorage.getItem('token');
+        if (!token) location.href='/login.html';
+
+        const container = document.getElementById('skillsContainer');
+
+        function createSkillRow(name='', level=3) {
+            const div = document.createElement('div');
+            div.className = 'skill-row';
+            div.innerHTML = `
+                <input type="text" class="skill-name" value="${escapeHtml(name)}" placeholder="Nom compétence">
+                <select class="skill-level">
+                    ${[1,2,3,4,5].map(l => `<option value="${l}" ${l==level?'selected':''}>Niveau ${l}</option>`).join('')}
+                </select>
+                <button type="button" class="remove-skill">X</button>
+            `;
+            div.querySelector('.remove-skill').onclick = () => div.remove();
+            return div;
+        }
+
+        function escapeHtml(str) { return str.replace(/[&<>]/g, m=> m=='&'?'&amp;':m=='<'?'&lt;':'&gt;'); }
+
+        async function loadProject() {
+            const res = await fetch(`/api/projects/${pid}/details`, { headers:{'Authorization':`Bearer ${token}`} });
+            if (!res.ok) return alert('Erreur chargement projet');
+            const proj = await res.json();
+            document.getElementById('title').value = proj.title;
+            document.getElementById('description').value = proj.description || '';
+            document.getElementById('groupSize').value = proj.group_size;
+            document.getElementById('maxGroups').value = proj.max_groups || '';
+            const skillRes = await fetch(`/api/projects/${pid}/skills`, { headers:{'Authorization':`Bearer ${token}`} });
+            if (skillRes.ok) {
+                const skills = await skillRes.json();
+                container.innerHTML = '';
+                skills.forEach(s => container.appendChild(createSkillRow(s.name, s.required_level)));
+            } else {
+                container.appendChild(createSkillRow());
+            }
+        }
+
+        document.getElementById('addSkill').onclick = () => container.appendChild(createSkillRow());
+
+        document.getElementById('editForm').onsubmit = async (e) => {
+            e.preventDefault();
+            const title = document.getElementById('title').value;
+            const description = document.getElementById('description').value;
+            const groupSize = parseInt(document.getElementById('groupSize').value);
+            const maxGroups = document.getElementById('maxGroups').value ? parseInt(document.getElementById('maxGroups').value) : null;
+            const skills = [];
+            document.querySelectorAll('.skill-row').forEach(row => {
+                const name = row.querySelector('.skill-name').value.trim();
+                const level = parseInt(row.querySelector('.skill-level').value);
+                if (name) skills.push({ name, required_level: level });
+            });
+            if (skills.length === 0) return alert('Ajoutez au moins une compétence.');
+            try {
+                const resp = await fetch(`/api/projects/${pid}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                    body: JSON.stringify({ title, description, group_size: groupSize, max_groups: maxGroups, skills })
+                });
+                const data = await resp.json();
+                if (resp.ok) {
+                    alert('Projet modifié avec succès !');
+                    const details = await fetch(`/api/projects/${pid}/details`, { headers:{'Authorization':`Bearer ${token}`} });
+                    const proj = await details.json();
+                    window.location.href = `class-detail.html?id=${proj.class_id}`;
+                } else {
+                    alert('Erreur : ' + data.error);
+                }
+            } catch (err) {
+                console.error(err);
+                alert('Erreur réseau : ' + err.message);
+            }
+        };
+
+        loadProject();
+    </script>
+</body>
+</html>

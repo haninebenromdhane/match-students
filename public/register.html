@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inscription - Edu-Match</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+    <header>
+        <h1>🎓 EduMatch</h1>
+        <nav>
+            <a href="index.html">Accueil</a>
+            <a href="login.html">Connexion</a>
+        </nav>
+    </header>
+
+    <div class="container">
+        <h2>Créer un compte</h2>
+        <form id="registerForm">
+            <input type="text" id="firstname" placeholder="Prénom" required>
+            <input type="text" id="lastname" placeholder="Nom" required>
+            <input type="email" id="email" placeholder="Email" required>
+            <input type="password" id="password" placeholder="Mot de passe" required>
+            <select id="role" required>
+                <option value="">Je suis...</option>
+                <option value="student">Étudiant</option>
+                <option value="professor">Professeur</option>
+            </select>
+            <button type="submit">S'inscrire</button>
+        </form>
+        <p style="text-align:center; margin-top:1rem;">
+            Déjà inscrit ? <a href="login.html">Se connecter</a>
+        </p>
+    </div>
+
+    <script src="/js/main.js"></script>
+   <script>
+    document.getElementById('registerForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const firstname = document.getElementById('firstname').value;
+        const lastname = document.getElementById('lastname').value;
+        const email = document.getElementById('email').value;
+        const password = document.getElementById('password').value;
+        const role = document.getElementById('role').value;
+
+        try {
+            const response = await fetch('/api/register', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ firstname, lastname, email, password, role })
+            });
+            const data = await response.json();
+            // apres avoir verifie it stored the token and redirects
+            if (response.ok) {
+                localStorage.setItem('token', data.token);
+                localStorage.setItem('user', JSON.stringify(data.user));
+                if (data.user.role === 'professor') {
+                    window.location.href = '/professor/dashboard.html';
+                } else {
+                    window.location.href = '/student/dashboard.html';
+                }
+            } else {
+                alert('Erreur : ' + data.error);
+            }
+        } catch (err) {
+            console.error(err);
+            alert('Erreur de connexion au serveur');
+        }
+    });
+</script>
+</body>
+</html>

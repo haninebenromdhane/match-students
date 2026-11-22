@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Projets de la classe - Étudiant</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <style>
+        .project-card {
+            background: #f9f9f9;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+        }
+        .btn-small {
+            display: inline-block;
+            background: #4a90e2;
+            color: white;
+            padding: 0.4rem 0.8rem;
+            text-decoration: none;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            margin-top: 0.5rem;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>🎓 MatchStudent</h1>
+        <nav>
+            <a href="dashboard.html">Tableau de bord</a>
+            <a href="profile-skills.html">Mes compétences</a>
+            <a href="join-class.html">Rejoindre une classe</a>
+            <a href="/index.html">Déconnexion</a>
+        </nav>
+    </header>
+
+    <main style="max-width: 1000px; margin: 2rem auto; padding: 0 1rem;">
+        <h2 id="className">Chargement...</h2>
+        <div id="projectsList">Chargement des projets...</div>
+    </main>
+
+    <script>
+        const urlParams = new URLSearchParams(window.location.search);
+        const classId = urlParams.get('classId');
+        if (!classId) {
+            alert('ID de classe manquant');
+            window.location.href = 'dashboard.html';
+        }
+
+        const token = localStorage.getItem('token');
+        if (!token) window.location.href = '/login.html';
+
+        async function loadClassAndProjects() {
+            try {
+                // Récupérer le nom de la classe
+                const classRes = await fetch('/api/student/classes', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (classRes.ok) {
+                    const classes = await classRes.json();
+                    const currentClass = classes.find(c => c.id == classId);
+                    if (currentClass) {
+                        document.getElementById('className').innerText = currentClass.name;
+                    } else {
+                        document.getElementById('className').innerText = 'Classe inconnue';
+                    }
+                }
+
+                // Charger les projets
+                const projectsRes = await fetch(`/api/student/classes/${classId}/projects`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (!projectsRes.ok) throw new Error('Erreur chargement projets');
+                const projects = await projectsRes.json();
+                const container = document.getElementById('projectsList');
+                if (projects.length === 0) {
+                    container.innerHTML = '<p>Aucun projet pour cette classe.</p>';
+                } else {
+                    container.innerHTML = projects.map(p => `
+                        <div class="project-card">
+                            <h3>${escapeHtml(p.title)}</h3>
+                            <p>${escapeHtml(p.description) || 'Pas de description'}</p>
+                            <p>Taille des groupes : ${p.group_size} | Groupes formés : ${p.group_count || 0}</p>
+                            <a href="project-detail.html?id=${p.id}" class="btn-small">Voir mon groupe</a>
+                        </div>
+                    `).join('');
+                }
+            } catch (err) {
+                console.error(err);
+                document.getElementById('projectsList').innerHTML = '<p>Erreur de chargement des projets.</p>';
+            }
+        }
+
+        function escapeHtml(str) {
+            if (!str) return '';
+            return str.replace(/[&<>]/g, function(m) {
+                if (m === '&') return '&amp;';
+                if (m === '<') return '&lt;';
+                if (m === '>') return '&gt;';
+                return m;
+            });
+        }
+
+        loadClassAndProjects();
+    </script>
+</body>
+</html>

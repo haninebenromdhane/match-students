@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mes compétences - Étudiant</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+    <header>
+        <h1>🎓 EduMatch</h1>
+        <nav>
+            <a href="dashboard.html">Tableau de bord</a>
+            <a href="join-class.html">Rejoindre une classe</a>
+            <a href="/index.html">Déconnexion</a>
+        </nav>
+    </header>
+
+    <div class="container">
+        <h2>Mes compétences</h2>
+        <p>Cochez les compétences que vous maîtrisez et indiquez votre niveau (1 = débutant, 5 = expert).</p>
+
+        <form id="skillsForm">
+            <div id="skillsList">
+                <!-- Les compétences seront chargées ici -->
+            </div>
+            <button type="submit">Enregistrer</button>
+        </form>
+    </div>
+
+    <style>
+        .skill-item {
+            margin-bottom: 1rem;
+            padding: 0.5rem;
+            background: #f9f9f9;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+        .skill-name {
+            font-weight: bold;
+            width: 120px;
+        }
+        .level-group {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+        }
+        input[type="checkbox"] {
+            width: 20px;
+            height: 20px;
+            margin-right: 0.5rem;
+        }
+        .level-radio {
+            margin-left: 0.5rem;
+        }
+        button[type="submit"] {
+            background: #4a90e2;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 0.5rem 1rem;
+            cursor: pointer;
+            margin-top: 1rem;
+        }
+    </style>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', async () => {
+            const token = localStorage.getItem('token');
+            if (!token) {
+                window.location.href = '/login.html';
+                return;
+            }
+
+            const container = document.getElementById('skillsList');
+            let allSkills = [];      // [{ id, name }]
+            let userSkills = {};     // { skillId: level }
+
+            // 1. Charger toutes les compétences existantes
+            try {
+                const res = await fetch('/api/skills/all');
+                if (res.ok) {
+                    allSkills = await res.json();
+                } else {
+                    console.error('Erreur chargement compétences');
+                }
+            } catch (err) {
+                console.error(err);
+            }
+
+            // 2. Charger les compétences actuelles de l'utilisateur
+            try {
+                const res = await fetch('/api/user/skills', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (res.ok) {
+                    const userSkillsArray = await res.json();
+                    userSkillsArray.forEach(s => {
+                        userSkills[s.id] = s.level;
+                    });
+                }
+            } catch (err) {
+                console.error(err);
+            }
+
+            // 3. Générer l'interface
+            if (allSkills.length === 0) {
+                container.innerHTML = '<p>Aucune compétence définie pour le moment. Les professeurs en créeront via les projets.</p>';
+            } else {
+                allSkills.forEach(skill => {
+                    const checked = userSkills[skill.id] ? true : false;
+                    const level = userSkills[skill.id] || 3;
+
+                    const div = document.createElement('div');
+                    div.className = 'skill-item';
+                    div.innerHTML = `
+                        <input type="checkbox" class="skill-checkbox" data-id="${skill.id}" ${checked ? 'checked' : ''}>
+                        <span class="skill-name">${escapeHtml(skill.name)}</span>
+                        <div class="level-group">
+                            <span>Niveau :</span>
+                            ${[1,2,3,4,5].map(lvl => `
+                                <label class="level-radio">
+                                    <input type="radio" name="level_${skill.id}" value="${lvl}" ${checked && level == lvl ? 'checked' : ''} ${!checked ? 'disabled' : ''}>
+                                    ${lvl}
+                                </label>
+                            `).join('')}
+                        </div>
+                    `;
+                    container.appendChild(div);
+                });
+            }
+
+            // Gestion de l'activation/désactivation des radios en fonction de la case à cocher
+            document.querySelectorAll('.skill-checkbox').forEach(cb => {
+                cb.addEventListener('change', function() {
+                    const skillId = this.dataset.id;
+                    const radios = document.querySelectorAll(`input[name="level_${skillId}"]`);
+                    radios.forEach(r => r.disabled = !this.checked);
+                    if (!this.checked) {
+                        radios.forEach(r => r.checked = false);
+                    } else {
+                        const anyChecked = Array.from(radios).some(r => r.checked);
+                        if (!anyChecked && radios.length) radios[2].checked = true; // niveau 3 par défaut
+                    }
+                });
+            });
+
+            // Fonction utilitaire
+            function escapeHtml(str) {
+                if (!str) return '';
+                return str.replace(/[&<>]/g, function(m) {
+                    if (m === '&') return '&amp;';
+                    if (m === '<') return '&lt;';
+                    if (m === '>') return '&gt;';
+                    return m;
+                });
+            }
+
+            // Soumission du formulaire
+            document.getElementById('skillsForm').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const skills = [];
+                document.querySelectorAll('.skill-item').forEach(item => {
+                    const cb = item.querySelector('.skill-checkbox');
+                    if (cb && cb.checked) {
+                        const skillName = item.querySelector('.skill-name').innerText;
+                        const selectedRadio = item.querySelector('input[type="radio"]:checked');
+                        const level = selectedRadio ? parseInt(selectedRadio.value) : 3;
+                        skills.push({ name: skillName, level });
+                    }
+                });
+
+                try {
+                    const response = await fetch('/api/user/skills', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${token}`
+                        },
+                        body: JSON.stringify({ skills })
+                    });
+                    const data = await response.json();
+                    if (response.ok) {
+                        alert('Compétences enregistrées !');
+                        window.location.href = 'dashboard.html';
+                    } else {
+                        alert('Erreur : ' + data.error);
+                    }
+                } catch (err) {
+                    console.error(err);
+                    alert('Erreur de connexion');
+                }
+            });
+        });
+    </script>
+</body>
+</html>
